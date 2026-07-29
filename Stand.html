@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parking Stand View - AMS PKU</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; overflow-x: hidden; }
+        .wrapper { display: flex; width: 100%; height: 100vh; overflow: hidden; }
+        .sidebar { min-width: 250px; max-width: 250px; background-color: #ffffff; border-right: 1px solid #eaeaea; display: flex; flex-direction: column; transition: all 0.3s ease; z-index: 1050; }
+        .sidebar.collapsed { margin-left: -250px; }
+        .sidebar-overlay { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 1040; transition: opacity 0.3s ease; }
+        .sidebar-header { padding: 25px 20px; border-bottom: 1px solid #f0f0f0; margin-bottom: 15px; }
+        .sidebar-header h5 { margin: 0; font-weight: 700; color: #2c3e50; font-size: 1.1rem; }
+        .user-profile-box { margin: 0 15px 15px; padding: 10px 12px; border: 1px solid #e9ecef; border-radius: 10px; background: #f8f9fa; }
+        .user-profile-box .name { font-size: 0.9rem; font-weight: 700; color: #2c3e50; line-height: 1.2; }
+        .user-profile-box .email { font-size: 0.75rem; color: #6c757d; }
+        .nav-link { color: #666; font-weight: 500; padding: 12px 20px; margin: 4px 15px; border-radius: 8px; transition: all 0.2s ease; display: flex; align-items: center; gap: 10px; }
+        .nav-link:hover, .nav-link.active { background-color: #e8f0fe; color: #0d6efd; }
+        
+        .content { flex-grow: 1; padding: 20px 30px; overflow-y: auto; min-width: 0; transition: all 0.3s ease; }
+        
+        /* Grid Parking Stand */
+        .stand-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+        
+        /* Card Stand Base Layout */
+        .stand-card { 
+            background-image: linear-gradient(rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.97)), url('bandar-udara-008-marka.jpg'); 
+            background-size: cover; 
+            background-position: center;
+            border: 2px solid #dee2e6; 
+            border-radius: 14px; 
+            overflow: hidden; 
+            transition: all 0.3s ease;
+            position: relative;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.02);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .stand-card.ready { border-color: #198754; background-image: linear-gradient(rgba(235, 247, 241, 0.92), rgba(255, 255, 255, 0.97)), url('bandar-udara-008-marka.jpg'); box-shadow: 0 6px 15px rgba(25, 135, 84, 0.08); }
+        .stand-card.standby { border-color: #ffc107; background-image: linear-gradient(rgba(255, 249, 225, 0.92), rgba(255, 255, 255, 0.97)), url('bandar-udara-008-marka.jpg'); box-shadow: 0 6px 15px rgba(255, 193, 7, 0.12); }
+        .stand-card.occupied { border-color: #dc3545; background-image: linear-gradient(rgba(253, 237, 237, 0.92), rgba(255, 255, 255, 0.97)), url('bandar-udara-008-marka.jpg'); box-shadow: 0 6px 15px rgba(220, 53, 69, 0.15); }
+
+        .stand-header { padding: 12px 15px; font-weight: 800; font-size: 1.2rem; border-bottom: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
+        .stand-body { padding: 15px; min-height: 180px; display: flex; flex-direction: column; justify-content: space-between; flex-grow: 1; }
+        
+        .flight-info { font-size: 0.85rem; font-weight: 600; }
+        .status-badge { font-size: 0.75rem; padding: 4px 10px; border-radius: 30px; font-weight: 700; text-transform: uppercase; }
+        .fs-7 { font-size: 0.8rem; }
+        
+        .pair-box { background: rgba(255, 255, 255, 0.65); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; border: 1px solid rgba(0,0,0,0.05); }
+
+        /* BANNER NOTIFIKASI NEXT PEMAKAIAN */
+        .next-flight-banner {
+            background: linear-gradient(135deg, #fffcf0 0%, #fff3cd 100%);
+            border-left: 5px solid #ffc107;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            border-top: 1px solid rgba(255, 193, 7, 0.2);
+            border-right: 1px solid rgba(255, 193, 7, 0.2);
+            border-bottom: 1px solid rgba(255, 193, 7, 0.2);
+            margin-top: 12px;
+        }
+        .next-flight-banner .title { font-weight: 800; color: #856404; margin-bottom: 3px; font-size: 0.7rem; display: flex; align-items: center; }
+        .next-flight-banner .details { font-weight: 700; color: #333; }
+
+        /* ALERT OCCUPIED > 45 MENIT */
+        @keyframes occupiedBlink {
+            0%, 100% {
+                box-shadow: 0 6px 15px rgba(220, 53, 69, 0.15);
+                border-color: #dc3545;
+                filter: brightness(1);
+            }
+            50% {
+                box-shadow: 0 0 0 4px rgba(220, 53, 69, 0.25), 0 10px 24px rgba(220, 53, 69, 0.35);
+                border-color: #ff1f3d;
+                filter: brightness(1.06);
+            }
+        }
+
+        .stand-card.occupied.alert-45 {
+            animation: occupiedBlink 1s infinite;
+        }
+
+        .remark-45 {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.68rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .3px;
+            background: #ff1f3d;
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.4);
+            border-radius: 999px;
+            padding: 3px 8px;
+            margin-left: 8px;
+            box-shadow: 0 2px 8px rgba(220, 53, 69, 0.35);
+        }
+
+        .theme-badge-toggle {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            width: 132px;
+            height: 40px;
+            border-radius: 999px;
+            padding: 4px;
+            background: linear-gradient(135deg, #e2e8f0, #cbd5e1);
+            box-shadow: inset 0 2px 6px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.08);
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.35s ease;
+        }
+        .theme-badge-toggle .pill {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            width: 62px;
+            height: 32px;
+            border-radius: 999px;
+            background: #ffffff;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+            transition: transform 0.35s cubic-bezier(.4,0,.2,1), background 0.35s ease;
+            z-index: 1;
+        }
+        .theme-badge-toggle .option {
+            position: relative;
+            z-index: 2;
+            width: 62px;
+            text-align: center;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #475569;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            transition: color 0.3s ease, transform 0.25s ease;
+        }
+        .theme-badge-toggle .option i { font-size: 0.8rem; }
+        .theme-badge-toggle .option.active { color: #0f172a; transform: scale(1.03); }
+        .theme-badge-toggle.dark { background: linear-gradient(135deg, #1e293b, #0f172a); }
+        .theme-badge-toggle.dark .pill { transform: translateX(62px); background: #1f2937; }
+        .theme-badge-toggle.dark .option { color: #cbd5e1; }
+        .theme-badge-toggle.dark .option.active { color: #f8fafc; }
+
+        body.dark-theme { background-color: #0b1220 !important; color: #e2e8f0; }
+        body.dark-theme .sidebar,
+        body.dark-theme .user-profile-box,
+        body.dark-theme .content,
+        body.dark-theme .stand-card,
+        body.dark-theme .pair-box,
+        body.dark-theme .next-flight-banner {
+            background-color: #111827 !important;
+            color: #e5e7eb !important;
+            border-color: #1f2937 !important;
+        }
+        body.dark-theme .flight-info,
+        body.dark-theme .flight-info * {
+            color: #e5e7eb !important;
+        }
+        body.dark-theme .flight-info .text-dark,
+        body.dark-theme .flight-info .text-muted {
+            color: #cbd5e1 !important;
+        }
+        body.dark-theme .nav-link { color: #cbd5e1 !important; }
+        body.dark-theme .nav-link:hover,
+        body.dark-theme .nav-link.active { background-color: #1e293b !important; color: #93c5fd !important; }
+
+        body.dark-theme h4.fw-bold.text-dark { color: #e5e7eb !important; }
+        body.dark-theme .stand-card .text-dark { color: #e5e7eb !important; }
+        body.dark-theme .stand-card .text-muted { color: #9ca3af !important; }
+        body.dark-theme .stand-card.occupied .pair-box,
+        body.dark-theme .stand-card.standby .pair-box { background: #0f172a !important; }
+        body.dark-theme .next-flight-banner .details,
+        body.dark-theme .next-flight-banner .title { color: #f1f5f9 !important; }
+
+        /* Fix kontras teks status penting pada dark theme */
+        body.dark-theme .stand-card .text-danger { color: #f87171 !important; }   /* ON BLOCK */
+        body.dark-theme .stand-card .text-warning { color: #facc15 !important; }  /* STANDBY / estimasi */
+        body.dark-theme .stand-card .text-primary { color: #60a5fa !important; }  /* STD/info primer */
+        body.dark-theme .stand-card .pair-box .fw-bold { color: #f8fafc !important; } /* isi termasuk registrasi */
+        body.dark-theme .stand-card .pair-box .text-muted { color: #cbd5e1 !important; } /* label Reg / Tipe */
+
+        @media (max-width: 768px) { .sidebar { position: fixed; left: -250px; height: 100vh; } .sidebar.show { left: 0; box-shadow: 2px 0 15px rgba(0,0,0,0.2); } .sidebar-overlay.show { display: block; } .content { padding: 15px; } }
+    </style>
+</head>
+<body>
+
+<div class="wrapper">
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header"><h5>AMC PKU</h5><small>Sultan Syarif Kasim II</small></div>
+        <div class="nav flex-column">
+            <a href="dashboard.html" class="nav-link"><i class="bi bi-pie-chart-fill"></i> Dashboard</a>
+            <a href="ams.html" class="nav-link"><i class="bi bi-grid-1x2"></i> Apron Management</a>
+            <a href="database.html" class="nav-link"><i class="bi bi-database"></i> Data Master</a>
+            <a href="#" class="nav-link active"><i class="bi bi-p-circle-fill"></i> Parking Stand</a>
+            <a href="download.html" class="nav-link"><i class="bi bi-cloud-arrow-down-fill"></i> Download Center</a>
+        </div>
+        <div class="user-profile-box">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-person-circle fs-4 text-primary"></i>
+                <div class="flex-grow-1 overflow-hidden">
+                    <div id="profileName" class="name text-truncate">User</div>
+                    <div id="profileEmail" class="email text-truncate">-</div>
+                </div>
+            </div>
+        </div>
+        <div class="mt-auto mb-4 px-3">
+            <button class="btn btn-outline-danger w-100 fw-bold" onclick="logout()"><i class="bi bi-box-arrow-right me-2"></i>Logout</button>
+        </div>
+    </nav>
+
+    <div class="content">
+        <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
+            <div class="d-flex align-items-center">
+                <button class="btn btn-light border shadow-sm px-2 py-1 me-3" onclick="toggleSidebar()"><i class="bi bi-list fs-4 text-dark"></i></button>
+                <h4 class="fw-bold text-dark m-0">Parking Stand Monitor</h4>
+            </div>
+            <div class="d-flex align-items-center gap-3">
+                <div id="themeBadgeToggle" class="theme-badge-toggle" onclick="toggleThemeBadge()" title="Ganti tema">
+                    <span class="pill"></span>
+                    <span id="themeOptLight" class="option active"><i class="bi bi-sun-fill"></i> Light</span>
+                    <span id="themeOptDark" class="option"><i class="bi bi-moon-stars-fill"></i> Dark</span>
+                </div>
+                <span class="badge bg-success px-2 py-1.5 shadow-sm"><i class="bi bi-arrow-repeat me-1"></i> Auto-Sync Aktif</span>
+                <span class="badge bg-primary px-3 py-2 fw-bold shadow-sm" id="liveClock" style="font-variant-numeric: tabular-nums;">00:00:00</span>
+            </div>
+        </div>
+
+        <div class="d-flex gap-3 mb-4 flex-wrap">
+            <div class="d-flex align-items-center gap-2 bg-white px-3 py-1.5 border rounded-pill shadow-sm"><span class="badge bg-success p-1.5 rounded-circle">&nbsp;</span> <small class="fw-bold text-muted">READY</small></div>
+            <div class="d-flex align-items-center gap-2 bg-white px-3 py-1.5 border rounded-pill shadow-sm"><span class="badge bg-warning p-1.5 rounded-circle">&nbsp;</span> <small class="fw-bold text-muted">STANDBY / PLOTTING</small></div>
+            <div class="d-flex align-items-center gap-2 bg-white px-3 py-1.5 border rounded-pill shadow-sm"><span class="badge bg-danger p-1.5 rounded-circle">&nbsp;</span> <small class="fw-bold text-muted">OCCUPIED</small></div>
+            <div class="d-flex align-items-center gap-2 bg-white px-3 py-1.5 border rounded-pill shadow-sm"><span class="badge bg-primary p-1.5 rounded-circle">&nbsp;</span> <small class="fw-bold text-muted">RON</small></div>
+        </div>
+
+        <div class="stand-grid" id="gridContainer"></div>
+    </div>
+</div>
+
+<script>
+    const supabaseUrl = 'https://hnlnkhbwbidthnupzhbp.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhubG5raGJ3YmlkdGhudXB6aGJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1NDE5NjYsImV4cCI6MjA5MzExNzk2Nn0.NZkxKilb-CwTx3ffmzc8_sVOaSgeulJAihJUxaoRTXI';
+    let sbClient = window.supabase ? window.supabase.createClient(supabaseUrl, supabaseKey) : null;
+
+    function toggleSidebar() { const s = document.getElementById('sidebar'); if (window.innerWidth <= 768) { s.classList.toggle('show'); document.getElementById('sidebarOverlay').classList.toggle('show'); } else { s.classList.toggle('collapsed'); } }
+
+    async function initUserProfile() {
+        if (!sbClient) return;
+        try {
+            const { data: { session } } = await sbClient.auth.getSession();
+            if (!session) { window.location.replace('index.html'); return; }
+
+            const user = session.user || {};
+            const storedName = localStorage.getItem('ams_user_name') || '';
+            const storedEmail = localStorage.getItem('ams_user_email') || '';
+            const metadataName = user?.user_metadata?.full_name || user?.user_metadata?.name || '';
+            const finalName = (metadataName && metadataName.trim()) || storedName || (user.email ? user.email.split('@')[0] : 'User');
+            const finalEmail = user.email || storedEmail || '-';
+
+            localStorage.setItem('ams_user_name', finalName);
+            localStorage.setItem('ams_user_email', finalEmail);
+            localStorage.setItem('ams_user_id', user.id || '');
+
+            const elName = document.getElementById('profileName');
+            const elEmail = document.getElementById('profileEmail');
+            if (elName) elName.textContent = finalName;
+            if (elEmail) elEmail.textContent = finalEmail;
+        } catch (err) {
+            console.error('Gagal inisialisasi profil user:', err);
+            window.location.replace('index.html');
+        }
+    }
+    
+    setInterval(() => { 
+        document.getElementById('liveClock').innerText = new Date().toLocaleTimeString('en-GB', { 
+            timeZone: 'Asia/Jakarta', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' 
+        }); 
+    }, 1000);
+
+    function getLocalDateString(offsetDays = 0) { 
+        const d = new Date();
+        d.setDate(d.getDate() + offsetDays);
+        return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }); // Format YYYY-MM-DD
+    }
+
+    const todayStr = getLocalDateString(0);
+    const tomorrowStr = getLocalDateString(1);
+    const yesterdayStr = getLocalDateString(-1);
+
+    function formatTimeWithDate(dateStr, timeStr) {
+        if (!timeStr) return '-';
+        if (dateStr === todayStr) return timeStr;
+        if (dateStr === tomorrowStr) return `${timeStr} <span class="badge bg-warning text-dark border border-warning ms-1" style="font-size:0.6rem;">BESOK</span>`;
+        if (dateStr === yesterdayStr) return `${timeStr} <span class="badge bg-secondary text-white border border-secondary ms-1" style="font-size:0.6rem;">KEMARIN</span>`;
+        
+        let dObj = new Date(dateStr);
+        let dFmt = `${String(dObj.getDate()).padStart(2,'0')}/${String(dObj.getMonth()+1).padStart(2,'0')}`;
+        return `${timeStr} <span class="badge bg-secondary text-white ms-1" style="font-size:0.6rem;">${dFmt}</span>`;
+    }
+
+    function getOccupiedMinutesFromFlight(flight) {
+        if (!flight) return 0;
+
+        const baseTime = (flight.block_time || flight.jadwal || '').trim();
+        if (!baseTime) return 0;
+
+        const datePart = (flight.date || '').trim();
+        if (!datePart) return 0;
+
+        const hhmm = baseTime.match(/^(\d{1,2}):(\d{2})/);
+        if (!hhmm) return 0;
+
+        const h = Number(hhmm[1]);
+        const m = Number(hhmm[2]);
+        if (Number.isNaN(h) || Number.isNaN(m)) return 0;
+
+        const nowJkt = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
+        const ref = new Date(`${datePart}T00:00:00`);
+        ref.setHours(h, m, 0, 0);
+
+        const diffMs = nowJkt - ref;
+        return Math.max(0, Math.floor(diffMs / 60000));
+    }
+
+    // --- LOGIKA PARKING MONITOR ---
+    async function updateParkingStands() {
+        if(!sbClient) return;
+        
+        let datesToFetch = [];
+        for (let i = -2; i <= 2; i++) datesToFetch.push(getLocalDateString(i));
+        
+        try {
+            const { data: flights, error } = await sbClient.from('daily_flights').select('*').in('date', datesToFetch);
+            if (error) throw error;
+            
+            const activeFlights = (flights || []).filter(f => f.status !== 'Cancel');
+
+            let aircraftTracker = {};
+            activeFlights.forEach(f => {
+                let reg = (f.reg || '').trim().toUpperCase();
+                if (!reg) reg = 'UNKNOWN_' + f.id; 
+                if (!aircraftTracker[reg]) aircraftTracker[reg] = [];
+                aircraftTracker[reg].push({ type: f.leg, data: f });
+            });
+
+            let allFlightCycles = [];
+
+            Object.keys(aircraftTracker).forEach(reg => {
+                let legs = aircraftTracker[reg];
+
+                let arrs = legs.filter(l => l.type === 'A').map(l => l.data);
+                let deps = legs.filter(l => l.type === 'D').map(l => l.data);
+
+                const normTime = (t) => {
+                    const m = (t || '').toString().trim().match(/^(\d{1,2}):(\d{2})/);
+                    if (!m) return null;
+                    const hh = String(Math.min(23, Math.max(0, Number(m[1])))).padStart(2, '0');
+                    const mm = String(Math.min(59, Math.max(0, Number(m[2])))).padStart(2, '0');
+                    return `${hh}:${mm}`;
+                };
+
+                const getEffectiveTime = (f) => normTime(f?.block_time) || normTime(f?.jadwal) || '99:99';
+
+                const toTs = (f) => {
+                    const d = (f?.date || '').trim();
+                    const t = getEffectiveTime(f);
+                    if (!d || t === '99:99') return Number.MAX_SAFE_INTEGER;
+                    return new Date(`${d}T${t}:00`).getTime();
+                };
+
+                const getStandNum = (f) => {
+                    const s = (f?.stand || '').toString().trim();
+                    if (!s) return null;
+                    const n = parseInt(s.replace(/\D/g, ''), 10);
+                    return Number.isNaN(n) ? null : n;
+                };
+
+                arrs.sort((a, b) => toTs(a) - toTs(b));
+                deps.sort((a, b) => toTs(a) - toTs(b));
+
+                const usedDepIds = new Set();
+
+                arrs.forEach(a => {
+                    const aTs = toTs(a);
+                    const aStand = getStandNum(a);
+
+                    const candidates = deps
+                        .filter(d => !usedDepIds.has(d.id))
+                        .map(d => {
+                            const dTs = toTs(d);
+                            const dStand = getStandNum(d);
+
+                            const sameStand = (aStand !== null && dStand !== null && aStand === dStand) ? 0 : 1;
+                            const afterArr = dTs >= aTs ? 0 : 1;
+                            const delta = Math.abs(dTs - aTs);
+
+                            return { d, sameStand, afterArr, delta };
+                        });
+
+                    if (candidates.length === 0) {
+                        allFlightCycles.push({ arr: a, dep: null, reg: reg });
+                        return;
+                    }
+
+                    candidates.sort((x, y) =>
+                        (x.sameStand - y.sameStand) ||
+                        (x.afterArr - y.afterArr) ||
+                        (x.delta - y.delta)
+                    );
+
+                    const chosen = candidates[0]?.d || null;
+
+                    if (chosen) {
+                        usedDepIds.add(chosen.id);
+                        allFlightCycles.push({ arr: a, dep: chosen, reg: reg });
+                    } else {
+                        allFlightCycles.push({ arr: a, dep: null, reg: reg });
+                    }
+                });
+
+                deps.forEach(d => {
+                    if (!usedDepIds.has(d.id)) {
+                        allFlightCycles.push({ arr: null, dep: d, reg: reg });
+                    }
+                });
+            });
+
+            let relevantCycles = [];
+            
+            allFlightCycles.forEach(c => {
+                let a = c.arr;
+                let d = c.dep;
+
+                let standNum = null;
+                if (a && a.stand && a.stand.trim() !== '') standNum = parseInt(a.stand.replace(/\D/g, ''));
+                else if (d && d.stand && d.stand.trim() !== '') standNum = parseInt(d.stand.replace(/\D/g, ''));
+
+                if (!standNum || standNum < 1 || standNum > 12) return;
+
+                let cycleStatus = 'READY';
+                let d_hasBlock = d && d.block_time && d.block_time.trim() !== '';
+                let a_hasBlock = a && a.block_time && a.block_time.trim() !== '';
+
+                if (d_hasBlock) {
+                    cycleStatus = 'READY'; 
+                } else {
+                    if (a) {
+                        cycleStatus = a_hasBlock ? 'OCCUPIED' : 'STANDBY';
+                    } else if (d) {
+                        cycleStatus = 'OCCUPIED'; 
+                    }
+                }
+
+                if (cycleStatus === 'READY') return; 
+                if (cycleStatus === 'STANDBY' && a && a.date > todayStr) return; 
+
+                let isRON = false;
+                if (a && d && a.date !== d.date) isRON = true;
+                if (!a && d) isRON = true; 
+                if (a && !d && cycleStatus === 'OCCUPIED' && a.date < todayStr) isRON = true; 
+
+                let sortKey = a ? (a.date + (a.jadwal || '99:99')) : (d ? (d.date + (d.jadwal || '99:99')) : '99:9999:99');
+
+                relevantCycles.push({
+                    arr: a, dep: d, reg: c.reg, standNum: standNum, status: cycleStatus,
+                    sortTime: sortKey, isRON: isRON
+                });
+            });
+
+            let standsData = {};
+            for (let i = 1; i <= 12; i++) { standsData[i] = { status: 'READY', current: null, next: null }; }
+
+            relevantCycles.sort((a, b) => a.sortTime.localeCompare(b.sortTime));
+
+            for (let i = 1; i <= 12; i++) {
+                let cyclesInStand = relevantCycles.filter(c => c.standNum === i);
+                if (cyclesInStand.length === 0) continue;
+
+                let occupiedCycle = cyclesInStand.find(c => c.status === 'OCCUPIED');
+                let standbyCycles = cyclesInStand.filter(c => c.status === 'STANDBY');
+
+                if (occupiedCycle) {
+                    standsData[i].status = 'OCCUPIED';
+                    standsData[i].current = occupiedCycle;
+                    if (standbyCycles.length > 0) standsData[i].next = standbyCycles[0];
+                } else if (standbyCycles.length > 0) {
+                    standsData[i].status = 'STANDBY';
+                    standsData[i].current = standbyCycles[0];
+                    if (standbyCycles.length > 1) standsData[i].next = standbyCycles[1];
+                }
+            }
+
+            const container = document.getElementById('gridContainer');
+            container.innerHTML = '';
+
+            for (let i = 1; i <= 12; i++) {
+                const stand = standsData[i];
+                const card = document.createElement('div');
+
+                let isOver45 = false;
+                if (stand.status === 'OCCUPIED' && stand.current && stand.current.arr && !stand.current.isRON) {
+                    const occupiedMins = getOccupiedMinutesFromFlight(stand.current.arr);
+                    isOver45 = occupiedMins > 45;
+                }
+
+                card.className = `stand-card ${stand.status.toLowerCase()}${isOver45 ? ' alert-45' : ''}`;
+
+                let headerColor = 'text-success', badgeColor = 'bg-success';
+                if (stand.status === 'STANDBY') { headerColor = 'text-warning'; badgeColor = 'bg-warning text-dark'; }
+                if (stand.status === 'OCCUPIED') { headerColor = 'text-danger'; badgeColor = 'bg-danger'; }
+
+                let bodyContent = '';
+                
+                if (stand.status === 'READY') {
+                    bodyContent = `
+                        <div class="d-flex justify-content-center align-items-center h-100">
+                            <div class="text-center text-success py-3">
+                                <i class="bi bi-check-circle-fill fs-1 d-block mb-1"></i>
+                                <span class="small fw-bold text-uppercase tracking-wide">Ready to Use</span>
+                            </div>
+                        </div>`;
+                } 
+                else if (stand.current) {
+                    let arr = stand.current.arr;
+                    let dep = stand.current.dep;
+                    let primary = arr || dep;
+                    
+                    let ronBadgeHtml = stand.current.isRON ? `<span class="badge bg-primary ms-2 shadow-sm border border-light px-2" style="font-size:0.75rem;"><i class="bi bi-moon-stars-fill me-1"></i>RON</span>` : '';
+
+                    bodyContent += `<div class="flight-info text-dark">`;
+
+                    if (stand.status === 'OCCUPIED') {
+                        bodyContent += `
+                            <div class="text-center mb-2 pb-1 border-bottom d-flex justify-content-center align-items-center flex-wrap">
+                                <span class="fs-6 fw-bold text-danger"><i class="bi bi-airplane-fill me-1"></i> ON BLOCK: ${primary.reg || '-'}</span>
+                                <span class="badge bg-secondary ms-2">${primary.tipe_ac || '-'}</span>
+                                ${ronBadgeHtml}
+                            </div>`;
+                        
+                        if (arr) {
+                            let timeDisplay = arr.block_time ? formatTimeWithDate(arr.date, arr.block_time) : formatTimeWithDate(arr.date, (arr.jadwal || '-'));
+                            bodyContent += `
+                                <div class="pair-box border-danger border-opacity-50 border-start border-4">
+                                    <div class="fs-7 text-muted fw-bold mb-1">Kedatangan</div>
+                                    <div class="row g-1 fs-7 align-items-center">
+                                        <div class="col-4 text-muted">Flight:</div><div class="col-8 text-end fw-bold">${arr.callsign || ''}${arr.flight_number || ''}</div>
+                                        <div class="col-4 text-muted">ATA:</div><div class="col-8 text-end text-danger fw-bold d-flex justify-content-end align-items-center"><i class="bi bi-clock-fill me-1"></i> ${timeDisplay}</div>
+                                    </div>
+                                </div>`;
+                        }
+                    } else if (stand.status === 'STANDBY') {
+                        if (arr) {
+                            let timeDisplay = formatTimeWithDate(arr.date, (arr.jadwal || '-'));
+                            bodyContent += `
+                                <div class="pair-box border-warning border-opacity-50 border-start border-4">
+                                    <div class="fs-6 fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
+                                        <span><i class="bi bi-box-arrow-in-down-right text-warning me-1"></i> ARR: ${arr.callsign || ''}${arr.flight_number || ''}</span>
+                                        ${stand.current.isRON ? '<span class="badge bg-primary" style="font-size:0.6rem;">RON</span>' : ''}
+                                    </div>
+                                    <div class="row g-1 fs-7 align-items-center">
+                                        <div class="col-6 text-muted">Reg / Tipe:</div><div class="col-6 text-end fw-bold">${arr.reg || '-'} (${arr.tipe_ac || '-'})</div>
+                                        <div class="col-6 text-muted">Est. STA:</div><div class="col-6 text-end fw-bold text-warning d-flex justify-content-end align-items-center">${timeDisplay}</div>
+                                    </div>
+                                </div>`;
+                        }
+                    }
+
+                    if (dep) {
+                        let timeDisplay = formatTimeWithDate(dep.date, (dep.jadwal || '-'));
+                        bodyContent += `
+                            <div class="pair-box border-primary border-opacity-50 border-start border-4 mt-2">
+                                <div class="fs-7 text-muted fw-bold mb-1">Keberangkatan</div>
+                                <div class="row g-1 fs-7 align-items-center">
+                                    <div class="col-4 text-muted">Flight:</div><div class="col-8 text-end fw-bold">${dep.callsign || ''}${dep.flight_number || ''}</div>
+                                    <div class="col-4 text-muted">STD:</div><div class="col-8 text-end fw-bold text-primary d-flex justify-content-end align-items-center">${timeDisplay}</div>
+                                </div>
+                            </div>`;
+                    }
+                    bodyContent += `</div>`; 
+
+                    if (stand.next) {
+                        let nArr = stand.next.arr;
+                        let nDep = stand.next.dep;
+                        let nPrimary = nArr || nDep;
+                        let nTime = nArr ? formatTimeWithDate(nArr.date, nArr.jadwal) : (nDep ? formatTimeWithDate(nDep.date, nDep.jadwal) : '-');
+                        
+                        bodyContent += `
+                            <div class="next-flight-banner shadow-sm mt-auto">
+                                <div class="title"><i class="bi bi-info-circle-fill me-1"></i> NEXT PEMAKAIAN (STANDBY)</div>
+                                <div class="details d-flex justify-content-between align-items-center">
+                                    <span>${nPrimary.callsign || ''}${nPrimary.flight_number || ''} <small class="text-muted">(${nPrimary.reg || '-'})</small></span>
+                                    <span class="badge bg-warning text-dark border border-warning shadow-sm d-flex align-items-center"><i class="bi bi-clock me-1"></i> ${nTime}</span>
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+
+                card.innerHTML = `
+                    <div class="stand-header ${headerColor}">
+                        <span>Parking Stand D${i}</span>
+                        <div class="d-flex align-items-center">
+                            <span class="status-badge ${badgeColor} text-white">${stand.status}</span>
+                            ${isOver45 ? '<span class="remark-45"><i class="bi bi-exclamation-triangle-fill"></i>45 min</span>' : ''}
+                        </div>
+                    </div>
+                    <div class="stand-body">
+                        ${bodyContent}
+                    </div>
+                `;
+                container.appendChild(card);
+            }
+        } catch (err) {
+            console.error("Gagal mensinkronkan data:", err);
+        }
+    }
+
+    function applyTheme(theme) {
+        const body = document.body;
+        const toggle = document.getElementById('themeBadgeToggle');
+        const optLight = document.getElementById('themeOptLight');
+        const optDark = document.getElementById('themeOptDark');
+
+        if (!toggle || !optLight || !optDark) return;
+
+        const isDark = theme === 'dark';
+        body.classList.toggle('dark-theme', isDark);
+        toggle.classList.toggle('dark', isDark);
+
+        optLight.classList.toggle('active', !isDark);
+        optDark.classList.toggle('active', isDark);
+
+        localStorage.setItem('ams_theme', isDark ? 'dark' : 'light');
+    }
+
+    function toggleThemeBadge() {
+        const isDark = document.body.classList.contains('dark-theme');
+        applyTheme(isDark ? 'light' : 'dark');
+    }
+
+    setInterval(updateParkingStands, 5000);
+    async function logout() {
+        if(!sbClient) return;
+        await sbClient.auth.signOut();
+        localStorage.removeItem('ams_user_name');
+        localStorage.removeItem('ams_user_email');
+        localStorage.removeItem('ams_user_id');
+        window.location.replace('index.html');
+    }
+    window.onload = async () => {
+        const savedTheme = localStorage.getItem('ams_theme') || 'light';
+        applyTheme(savedTheme);
+
+        await initUserProfile();
+        updateParkingStands();
+    };
+</script>
+</body>
+</html>
